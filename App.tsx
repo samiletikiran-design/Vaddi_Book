@@ -15,7 +15,7 @@ import { EditRepaymentForm } from './components/EditRepaymentForm';
 import { EditLendieForm } from './components/EditLendieForm';
 import { EditAccountForm } from './components/EditAccountForm';
 import { GlobalSummaryDashboard } from './components/GlobalSummaryDashboard';
-import { Login } from './components/Login';
+import { OTPLogin } from './components/OTPLogin';
 import { InterestCalculator } from './components/InterestCalculator';
 import { UpcomingPayments } from './components/UpcomingPayments';
 import {
@@ -344,7 +344,7 @@ function App() {
   };
 
   if (!currentUser) {
-    return <Login onLogin={handleLogin} />;
+    return <OTPLogin onLogin={handleLogin} />;
   }
 
   const renderContent = () => {
