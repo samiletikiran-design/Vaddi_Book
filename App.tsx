@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Lendie, Loan, Repayment, User, CURRENCIES, UpcomingPayment } from './types';
-import { INITIAL_LENDIES } from './constants';
 import { LendieList } from './components/LendieList';
 import { LendieDashboard } from './components/LendieDashboard';
 import { LoanDetailsPage } from './components/LoanDetailsPage';
@@ -26,6 +25,19 @@ import {
     calculateInterestForLoan,
     calculateRepaymentsForLoan,
 } from './services/calculationService';
+import {
+    createOrUpdateUser,
+    getUser,
+    getLendies,
+    createLendie,
+    createLoan,
+    updateLendie,
+    updateLoan,
+    createRepayment,
+    updateRepayment,
+    deleteRepayment,
+} from './services/supabaseService';
+import { supabase } from './lib/supabase';
 
 
 type ViewState = 
@@ -58,6 +70,7 @@ const getLendiesWithUpdatedLoanStatuses = (lendiesToUpdate: Lendie[]): Lendie[] 
 function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [lendies, setLendies] = useState<Lendie[]>([]);
+  const [loading, setLoading] = useState(false);
   const [view, setView] = useState<ViewState>({ name: 'LIST' });
   const [modal, setModal] = useState<ModalState>('NONE');
   const [editingLoan, setEditingLoan] = useState<Loan | null>(null);
@@ -69,74 +82,85 @@ function App() {
   useEffect(() => {
     const userMobile = sessionStorage.getItem('lenders-ledger-user-mobile');
     if (userMobile) {
-        const profilesData = localStorage.getItem('lenders-ledger-profiles');
-        const profiles: Record<string, User> = profilesData ? JSON.parse(profilesData) : {};
-        const userProfile = profiles[userMobile];
-
-        if (userProfile) {
-            setCurrentUser(userProfile);
-        } else {
-            // Profile not found, clear session
-            handleLogout();
-        }
+        loadUserProfile(userMobile);
     }
   }, []);
 
+  const loadUserProfile = async (mobile: string) => {
+    try {
+      setLoading(true);
+      const user = await getUser(mobile);
+      if (user) {
+        setCurrentUser(user);
+        // Set user context for RLS
+        await supabase.rpc('set_current_user_id', { user_id: mobile });
+      } else {
+        handleLogout();
+      }
+    } catch (error) {
+      console.error('Error loading user profile:', error);
+      handleLogout();
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  // Effect to load lendie data from localStorage when user is set
+  // Effect to load lendie data from Supabase when user is set
   useEffect(() => {
     if (currentUser) {
-      const dataKey = `lenders-ledger-data-${currentUser.mobile}`;
-      try {
-        const savedData = localStorage.getItem(dataKey);
-        if (savedData) {
-          setLendies(JSON.parse(savedData));
-        } else {
-          setLendies(INITIAL_LENDIES);
-        }
-      } catch (error) {
-        console.error("Failed to parse lendies data from localStorage", error);
-        setLendies(INITIAL_LENDIES);
-      }
+      loadLendiesData();
     } else {
       setLendies([]);
     }
   }, [currentUser]);
 
-  // Effect to save lendie data to localStorage whenever it changes
-  // Also recalculates upcoming payments
-  useEffect(() => {
-    if (currentUser) {
-       try {
-            const dataKey = `lenders-ledger-data-${currentUser.mobile}`;
-            localStorage.setItem(dataKey, JSON.stringify(lendies));
-
-            // Recalculate upcoming payments
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const payments = getAllUpcomingPayments(lendies, today);
-            setUpcomingPayments(payments);
-
-       } catch (error) {
-            console.error("Failed to save lendies data to localStorage", error);
-       }
-    }
-  }, [lendies, currentUser]);
-
-
-  const handleLogin = (mobile: string) => {
-    const profilesData = localStorage.getItem('lenders-ledger-profiles');
-    const profiles: Record<string, User> = profilesData ? JSON.parse(profilesData) : {};
+  const loadLendiesData = async () => {
+    if (!currentUser) return;
     
-    let user = profiles[mobile];
-    if (!user) {
-      user = { mobile, name: 'Lender', currency: 'INR' }; // Create new user with default name and currency
-      profiles[mobile] = user;
-      localStorage.setItem('lenders-ledger-profiles', JSON.stringify(profiles));
+    try {
+      setLoading(true);
+      const lendiesData = await getLendies(currentUser.mobile);
+      setLendies(lendiesData);
+    } catch (error) {
+      console.error('Error loading lendies data:', error);
+    } finally {
+      setLoading(false);
     }
+  };
 
-    sessionStorage.setItem('lenders-ledger-user-mobile', mobile);
-    setCurrentUser(user);
+  // Effect to recalculate upcoming payments when lendies change
+  useEffect(() => {
+    if (currentUser && lendies.length >= 0) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const payments = getAllUpcomingPayments(lendies, today);
+      setUpcomingPayments(payments);
+    }
+  }, [lendies]);
+
+
+  const handleLogin = async (mobile: string) => {
+    try {
+      setLoading(true);
+      
+      // Set user context for RLS
+      await supabase.rpc('set_current_user_id', { user_id: mobile });
+      
+      let user = await getUser(mobile);
+      if (!user) {
+        // Create new user
+        user = { mobile, name: 'Lender', currency: 'INR' };
+        await createOrUpdateUser(user);
+      }
+
+      sessionStorage.setItem('lenders-ledger-user-mobile', mobile);
+      setCurrentUser(user);
+    } catch (error) {
+      console.error('Error during login:', error);
+      alert('Login failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleLogout = () => {
@@ -154,89 +178,97 @@ function App() {
     setView({ name: 'LIST' });
   };
   
-  const handleAddLendieAndLoan = (lendieData: Omit<Lendie, 'id' | 'loans' | 'repayments'>, loanData: Omit<Loan, 'id'>) => {
-    const newLendie: Lendie = {
-        ...lendieData,
-        id: `lendie-${Date.now()}`,
-        repayments: [],
-        loans: [{ ...loanData, id: `loan-${Date.now()}` }],
-    };
-    setLendies(prev => [...prev, newLendie]);
-    setModal('NONE');
-    setView({ name: 'DASHBOARD', lendieId: newLendie.id });
+  const handleAddLendieAndLoan = async (lendieData: Omit<Lendie, 'id' | 'loans' | 'repayments'>, loanData: Omit<Loan, 'id'>) => {
+    if (!currentUser) return;
+    
+    try {
+      setLoading(true);
+      const lendieId = await createLendie(currentUser.mobile, lendieData);
+      await createLoan(currentUser.mobile, lendieId, loanData);
+      
+      await loadLendiesData();
+      setModal('NONE');
+      setView({ name: 'DASHBOARD', lendieId });
+    } catch (error) {
+      console.error('Error adding lendie and loan:', error);
+      alert('Failed to add lendie and loan. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleAddRepayment = (lendieId: string, repaymentData: Omit<Repayment, 'id'>) => {
-     setLendies(prevLendies => {
-        const lendiesWithNewRepayment = prevLendies.map(lendie => {
-            if (lendie.id === lendieId) {
-                const newRepayment = { ...repaymentData, id: `repay-${Date.now()}`};
-                return { ...lendie, repayments: [...lendie.repayments, newRepayment] };
-            }
-            return lendie;
-        });
-        return getLendiesWithUpdatedLoanStatuses(lendiesWithNewRepayment);
-     });
-     setModal('NONE');
-     setRepaymentTargetLoanId(undefined);
-  }
+  const handleAddRepayment = async (lendieId: string, repaymentData: Omit<Repayment, 'id'>) => {
+    if (!currentUser) return;
+    
+    try {
+      setLoading(true);
+      await createRepayment(currentUser.mobile, repaymentData);
+      await loadLendiesData();
+      setModal('NONE');
+      setRepaymentTargetLoanId(undefined);
+    } catch (error) {
+      console.error('Error adding repayment:', error);
+      alert('Failed to add repayment. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
   
-  const handleAddNewLoan = (loanData: Omit<Loan, 'id'>) => {
+  const handleAddNewLoan = async (loanData: Omit<Loan, 'id'>) => {
+    if (!currentUser) return;
     if (view.name !== 'DASHBOARD') return;
-     setLendies(prevLendies => prevLendies.map(lendie => {
-        if (lendie.id === view.lendieId) {
-            const newLoan = { ...loanData, id: `loan-${Date.now()}`};
-            return { ...lendie, loans: [...lendie.loans, newLoan] };
-        }
-        return lendie;
-     }));
-     setModal('NONE');
-  }
+    
+    try {
+      setLoading(true);
+      await createLoan(currentUser.mobile, view.lendieId, loanData);
+      await loadLendiesData();
+      setModal('NONE');
+    } catch (error) {
+      console.error('Error adding loan:', error);
+      alert('Failed to add loan. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleOpenEditLoanModal = (loan: Loan) => {
     setEditingLoan(loan);
     setModal('EDIT_LOAN');
   };
 
-  const handleDeleteLoan = (loanId: string) => {
+  const handleDeleteLoan = async (loanId: string) => {
      if (view.name !== 'DASHBOARD' && view.name !== 'LOAN_DETAILS') {
       return;
     }
-    const { lendieId } = view;
     if (window.confirm('Are you sure you want to archive this loan? It will be hidden from view and excluded from calculations.')) {
-      setLendies(prevLendies =>
-        prevLendies.map(lendie => {
-          if (lendie.id === lendieId) {
-            const updatedLoans = lendie.loans.map(loan => {
-                if (loan.id === loanId) {
-                    return { ...loan, isArchived: true };
-                }
-                return loan;
-            });
-            return { ...lendie, loans: updatedLoans };
-          }
-          return lendie;
-        })
-      );
+      try {
+        setLoading(true);
+        await updateLoan(loanId, { isArchived: true });
+        await loadLendiesData();
+      } catch (error) {
+        console.error('Error archiving loan:', error);
+        alert('Failed to archive loan. Please try again.');
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
-  const handleUpdateLoan = (updatedLoan: Loan) => {
+  const handleUpdateLoan = async (updatedLoan: Loan) => {
     if (view.name !== 'DASHBOARD' && view.name !== 'LOAN_DETAILS') return;
-    setLendies(prevLendies => {
-      const lendiesWithUpdatedLoan = prevLendies.map(lendie => {
-        if (lendie.id === view.lendieId) {
-          return { 
-            ...lendie, 
-            loans: lendie.loans.map(loan => loan.id === updatedLoan.id ? updatedLoan : loan)
-          };
-        }
-        return lendie;
-      });
-      return getLendiesWithUpdatedLoanStatuses(lendiesWithUpdatedLoan);
-    });
-    setModal('NONE');
-    setEditingLoan(null);
+    
+    try {
+      setLoading(true);
+      await updateLoan(updatedLoan.id, updatedLoan);
+      await loadLendiesData();
+      setModal('NONE');
+      setEditingLoan(null);
+    } catch (error) {
+      console.error('Error updating loan:', error);
+      alert('Failed to update loan. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
   
   const handleOpenEditLendieModal = () => {
@@ -245,33 +277,37 @@ function App() {
     }
   };
 
-  const handleUpdateLendie = (updatedData: Pick<Lendie, 'name' | 'mobile' | 'address' | 'photo'>) => {
+  const handleUpdateLendie = async (updatedData: Pick<Lendie, 'name' | 'mobile' | 'address' | 'photo'>) => {
     if (view.name !== 'DASHBOARD') return;
-    setLendies(prevLendies => prevLendies.map(lendie => {
-      if (lendie.id === view.lendieId) {
-        return { 
-          ...lendie,
-          ...updatedData
-        };
-      }
-      return lendie;
-    }));
-    setModal('NONE');
+    
+    try {
+      setLoading(true);
+      await updateLendie(view.lendieId, updatedData);
+      await loadLendiesData();
+      setModal('NONE');
+    } catch (error) {
+      console.error('Error updating lendie:', error);
+      alert('Failed to update lendie. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleUpdateAccount = (updatedData: Pick<User, 'name' | 'currency'>) => {
+  const handleUpdateAccount = async (updatedData: Pick<User, 'name' | 'currency'>) => {
     if (!currentUser) return;
 
-    const updatedUser = { ...currentUser, ...updatedData };
-    
-    const profilesData = localStorage.getItem('lenders-ledger-profiles');
-    const profiles: Record<string, User> = profilesData ? JSON.parse(profilesData) : {};
-    
-    profiles[currentUser.mobile] = updatedUser;
-    localStorage.setItem('lenders-ledger-profiles', JSON.stringify(profiles));
-    
-    setCurrentUser(updatedUser);
-    setModal('NONE');
+    try {
+      setLoading(true);
+      const updatedUser = { ...currentUser, ...updatedData };
+      await createOrUpdateUser(updatedUser);
+      setCurrentUser(updatedUser);
+      setModal('NONE');
+    } catch (error) {
+      console.error('Error updating account:', error);
+      alert('Failed to update account. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleOpenRepaymentModal = (loanId?: string) => {
@@ -309,38 +345,36 @@ function App() {
     setModal('EDIT_REPAYMENT');
   };
 
-  const handleUpdateRepayment = (updatedRepayment: Repayment) => {
+  const handleUpdateRepayment = async (updatedRepayment: Repayment) => {
     if (view.name !== 'LOAN_DETAILS') return;
-    setLendies(prevLendies => {
-      const lendiesWithUpdatedRepayment = prevLendies.map(lendie => {
-        if (lendie.id === view.lendieId) {
-          return {
-            ...lendie,
-            repayments: lendie.repayments.map(r => r.id === updatedRepayment.id ? updatedRepayment : r)
-          };
-        }
-        return lendie;
-      });
-      return getLendiesWithUpdatedLoanStatuses(lendiesWithUpdatedRepayment);
-    });
-    setModal('NONE');
-    setEditingRepayment(null);
+    
+    try {
+      setLoading(true);
+      await updateRepayment(updatedRepayment.id, updatedRepayment);
+      await loadLendiesData();
+      setModal('NONE');
+      setEditingRepayment(null);
+    } catch (error) {
+      console.error('Error updating repayment:', error);
+      alert('Failed to update repayment. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleDeleteRepayment = (repaymentId: string) => {
+  const handleDeleteRepayment = async (repaymentId: string) => {
     if (view.name !== 'LOAN_DETAILS') return;
-    setLendies(prevLendies => {
-      const lendiesWithDeletedRepayment = prevLendies.map(lendie => {
-        if (lendie.id === view.lendieId) {
-          return {
-            ...lendie,
-            repayments: lendie.repayments.filter(r => r.id !== repaymentId)
-          };
-        }
-        return lendie;
-      });
-      return getLendiesWithUpdatedLoanStatuses(lendiesWithDeletedRepayment);
-    });
+    
+    try {
+      setLoading(true);
+      await deleteRepayment(repaymentId);
+      await loadLendiesData();
+    } catch (error) {
+      console.error('Error deleting repayment:', error);
+      alert('Failed to delete repayment. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (!currentUser) {
@@ -418,6 +452,17 @@ function App() {
   const currentLendieForModal = (view.name === 'DASHBOARD' || view.name === 'LOAN_DETAILS' || view.name === 'CLOSED_LOANS') ? lendies.find(l => l.id === view.lendieId) : undefined;
   const currentLoanForModal = (view.name === 'LOAN_DETAILS' && currentLendieForModal) ? currentLendieForModal.loans.find(l => l.id === view.loanId) : undefined;
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-primary mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-100 font-sans">
         <header className="bg-white shadow-sm">
@@ -427,7 +472,7 @@ function App() {
                      {view.name === 'LIST' && (
                         <button onClick={() => setModal('ADD_LENDIE_LOAN')} className="px-4 py-2 bg-brand-primary rounded-md text-white hover:bg-sky-600 flex items-center space-x-2">
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" /></svg>
-                            <span className="hidden sm:inline">Add New Lendie</span>
+                           <span className="hidden sm:inline">{loading ? 'Loading...' : 'Add New Lendie'}</span>
                         </button>
                     )}
                     <button onClick={() => setModal('INTEREST_CALCULATOR')} className="p-2 bg-slate-100 rounded-full hover:bg-slate-200 transition-colors" aria-label="Interest Calculator">
