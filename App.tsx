@@ -25,20 +25,18 @@ import {
     calculateInterestForLoan,
     calculateRepaymentsForLoan,
 } from './services/calculationService';
-import {
-    createOrUpdateUser,
-    getUser,
-    getLendies,
-    createLendie,
-    createLoan,
-    updateLendie,
-    updateLoan,
-    createRepayment,
-    updateRepayment,
-    deleteRepayment,
-} from './services/supabaseService';
 import { supabase } from './lib/supabase';
 
+// Import services based on Supabase availability
+const useSupabase = !!supabase;
+
+const importServices = async () => {
+  if (useSupabase) {
+    return await import('./services/supabaseService');
+  } else {
+    return await import('./services/localStorageService');
+  }
+};
 
 type ViewState = 
   | { name: 'LIST' }
@@ -77,9 +75,16 @@ function App() {
   const [editingRepayment, setEditingRepayment] = useState<Repayment | null>(null);
   const [upcomingPayments, setUpcomingPayments] = useState<UpcomingPayment[]>([]);
   const [repaymentTargetLoanId, setRepaymentTargetLoanId] = useState<string | undefined>();
+  const [services, setServices] = useState<any>(null);
 
   // Effect to check session and load user profile on initial mount
   useEffect(() => {
+    const initServices = async () => {
+      const serviceModule = await importServices();
+      setServices(serviceModule);
+    };
+    initServices();
+
     const userMobile = sessionStorage.getItem('lenders-ledger-user-mobile');
     if (userMobile) {
         loadUserProfile(userMobile);
@@ -87,13 +92,17 @@ function App() {
   }, []);
 
   const loadUserProfile = async (mobile: string) => {
+    if (!services) return;
+    
     try {
       setLoading(true);
-      const user = await getUser(mobile);
+      const user = await services.getUser(mobile);
       if (user) {
         setCurrentUser(user);
-        // Set user context for RLS
-        await supabase.rpc('set_current_user_id', { user_id: mobile });
+        // Set user context for RLS (only if using Supabase)
+        if (useSupabase && supabase) {
+          await supabase.rpc('set_current_user_id', { user_id: mobile });
+        }
       } else {
         handleLogout();
       }
@@ -107,19 +116,19 @@ function App() {
 
   // Effect to load lendie data from Supabase when user is set
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser && services) {
       loadLendiesData();
     } else {
       setLendies([]);
     }
-  }, [currentUser]);
+  }, [currentUser, services]);
 
   const loadLendiesData = async () => {
-    if (!currentUser) return;
+    if (!currentUser || !services) return;
     
     try {
       setLoading(true);
-      const lendiesData = await getLendies(currentUser.mobile);
+      const lendiesData = await services.getLendies(currentUser.mobile);
       setLendies(lendiesData);
     } catch (error) {
       console.error('Error loading lendies data:', error);
@@ -140,20 +149,27 @@ function App() {
 
 
   const handleLogin = async (mobile: string) => {
+    if (!services) {
+      alert('Services not initialized. Please refresh the page.');
+      return;
+    }
+    
     try {
       setLoading(true);
       
-      // Set user context for RLS
-      const { error: contextError } = await supabase.rpc('set_current_user_id', { user_id: mobile });
-      if (contextError) {
-        console.error('Error setting user context:', contextError);
+      // Set user context for RLS (only if using Supabase)
+      if (useSupabase && supabase) {
+        const { error: contextError } = await supabase.rpc('set_current_user_id', { user_id: mobile });
+        if (contextError) {
+          console.error('Error setting user context:', contextError);
+        }
       }
       
-      let user = await getUser(mobile);
+      let user = await services.getUser(mobile);
       if (!user) {
         // Create new user
         user = { mobile, name: 'Lender', currency: 'INR' };
-        await createOrUpdateUser(user);
+        await services.createOrUpdateUser(user);
       }
 
       sessionStorage.setItem('lenders-ledger-user-mobile', mobile);
@@ -182,12 +198,12 @@ function App() {
   };
   
   const handleAddLendieAndLoan = async (lendieData: Omit<Lendie, 'id' | 'loans' | 'repayments'>, loanData: Omit<Loan, 'id'>) => {
-    if (!currentUser) return;
+    if (!currentUser || !services) return;
     
     try {
       setLoading(true);
-      const lendieId = await createLendie(currentUser.mobile, lendieData);
-      await createLoan(currentUser.mobile, lendieId, loanData);
+      const lendieId = await services.createLendie(currentUser.mobile, lendieData);
+      await services.createLoan(currentUser.mobile, lendieId, loanData);
       
       await loadLendiesData();
       setModal('NONE');
@@ -201,11 +217,11 @@ function App() {
   };
 
   const handleAddRepayment = async (lendieId: string, repaymentData: Omit<Repayment, 'id'>) => {
-    if (!currentUser) return;
+    if (!currentUser || !services) return;
     
     try {
       setLoading(true);
-      await createRepayment(currentUser.mobile, repaymentData);
+      await services.createRepayment(currentUser.mobile, repaymentData);
       await loadLendiesData();
       setModal('NONE');
       setRepaymentTargetLoanId(undefined);
@@ -218,12 +234,12 @@ function App() {
   };
   
   const handleAddNewLoan = async (loanData: Omit<Loan, 'id'>) => {
-    if (!currentUser) return;
+    if (!currentUser || !services) return;
     if (view.name !== 'DASHBOARD') return;
     
     try {
       setLoading(true);
-      await createLoan(currentUser.mobile, view.lendieId, loanData);
+      await services.createLoan(currentUser.mobile, view.lendieId, loanData);
       await loadLendiesData();
       setModal('NONE');
     } catch (error) {
@@ -243,10 +259,12 @@ function App() {
      if (view.name !== 'DASHBOARD' && view.name !== 'LOAN_DETAILS') {
       return;
     }
+    if (!services) return;
+    
     if (window.confirm('Are you sure you want to archive this loan? It will be hidden from view and excluded from calculations.')) {
       try {
         setLoading(true);
-        await updateLoan(loanId, { isArchived: true });
+        await services.updateLoan(currentUser?.mobile, loanId, { isArchived: true });
         await loadLendiesData();
       } catch (error) {
         console.error('Error archiving loan:', error);
@@ -259,10 +277,11 @@ function App() {
 
   const handleUpdateLoan = async (updatedLoan: Loan) => {
     if (view.name !== 'DASHBOARD' && view.name !== 'LOAN_DETAILS') return;
+    if (!services) return;
     
     try {
       setLoading(true);
-      await updateLoan(updatedLoan.id, updatedLoan);
+      await services.updateLoan(currentUser?.mobile, updatedLoan.id, updatedLoan);
       await loadLendiesData();
       setModal('NONE');
       setEditingLoan(null);
@@ -282,10 +301,11 @@ function App() {
 
   const handleUpdateLendie = async (updatedData: Pick<Lendie, 'name' | 'mobile' | 'address' | 'photo'>) => {
     if (view.name !== 'DASHBOARD') return;
+    if (!services) return;
     
     try {
       setLoading(true);
-      await updateLendie(view.lendieId, updatedData);
+      await services.updateLendie(currentUser?.mobile, view.lendieId, updatedData);
       await loadLendiesData();
       setModal('NONE');
     } catch (error) {
@@ -297,12 +317,12 @@ function App() {
   };
 
   const handleUpdateAccount = async (updatedData: Pick<User, 'name' | 'currency'>) => {
-    if (!currentUser) return;
+    if (!currentUser || !services) return;
 
     try {
       setLoading(true);
       const updatedUser = { ...currentUser, ...updatedData };
-      await createOrUpdateUser(updatedUser);
+      await services.createOrUpdateUser(updatedUser);
       setCurrentUser(updatedUser);
       setModal('NONE');
     } catch (error) {
@@ -350,10 +370,11 @@ function App() {
 
   const handleUpdateRepayment = async (updatedRepayment: Repayment) => {
     if (view.name !== 'LOAN_DETAILS') return;
+    if (!services) return;
     
     try {
       setLoading(true);
-      await updateRepayment(updatedRepayment.id, updatedRepayment);
+      await services.updateRepayment(currentUser?.mobile, updatedRepayment.id, updatedRepayment);
       await loadLendiesData();
       setModal('NONE');
       setEditingRepayment(null);
@@ -367,10 +388,11 @@ function App() {
 
   const handleDeleteRepayment = async (repaymentId: string) => {
     if (view.name !== 'LOAN_DETAILS') return;
+    if (!services) return;
     
     try {
       setLoading(true);
-      await deleteRepayment(repaymentId);
+      await services.deleteRepayment(currentUser?.mobile, repaymentId);
       await loadLendiesData();
     } catch (error) {
       console.error('Error deleting repayment:', error);
@@ -381,6 +403,10 @@ function App() {
   };
 
   if (!currentUser) {
+    // Use simple login if Supabase is not available
+    if (!useSupabase) {
+      return <Login onLogin={handleLogin} />;
+    }
     return <OTPLogin onLogin={handleLogin} />;
   }
 
