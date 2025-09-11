@@ -29,22 +29,25 @@ export const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin }) => {
         setLoading(true);
         
         try {
-            const { data, error } = await supabase.rpc('generate_otp', {
+            const { data, error: rpcError } = await supabase.rpc('generate_otp', {
                 mobile_number: mobile.trim()
             });
 
-            if (error) throw error;
+            if (rpcError) {
+                console.error('RPC Error:', rpcError);
+                throw new Error('Failed to send OTP. Please try again.');
+            }
 
-            if (data.success) {
+            if (data && data.success) {
                 setStep('OTP');
                 setDemoOtp(data.demo_otp); // For demo - remove in production
                 setError('');
             } else {
-                setError(data.error);
+                setError(data?.error || 'Failed to send OTP. Please try again.');
             }
         } catch (err) {
             console.error('Error sending OTP:', err);
-            setError('Failed to send OTP. Please try again.');
+            setError(err instanceof Error ? err.message : 'Failed to send OTP. Please try again.');
         } finally {
             setLoading(false);
         }
@@ -62,24 +65,27 @@ export const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin }) => {
         setLoading(true);
         
         try {
-            const { data, error } = await supabase.rpc('verify_otp', {
+            const { data, error: rpcError } = await supabase.rpc('verify_otp', {
                 mobile_number: mobile.trim(),
                 otp_code: otp.trim()
             });
 
-            if (error) throw error;
+            if (rpcError) {
+                console.error('RPC Error:', rpcError);
+                throw new Error('Failed to verify OTP. Please try again.');
+            }
 
-            if (data.success) {
+            if (data && data.success) {
                 onLogin(mobile.trim());
             } else {
-                setError(data.error);
-                if (data.attempts_remaining !== undefined) {
+                setError(data?.error || 'Invalid OTP. Please try again.');
+                if (data?.attempts_remaining !== undefined) {
                     setAttemptsRemaining(data.attempts_remaining);
                 }
             }
         } catch (err) {
             console.error('Error verifying OTP:', err);
-            setError('Failed to verify OTP. Please try again.');
+            setError(err instanceof Error ? err.message : 'Failed to verify OTP. Please try again.');
         } finally {
             setLoading(false);
         }
@@ -92,21 +98,24 @@ export const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin }) => {
         setLoading(true);
         
         try {
-            const { data, error } = await supabase.rpc('generate_otp', {
+            const { data, error: rpcError } = await supabase.rpc('generate_otp', {
                 mobile_number: mobile.trim()
             });
 
-            if (error) throw error;
+            if (rpcError) {
+                console.error('RPC Error:', rpcError);
+                throw new Error('Failed to resend OTP. Please try again.');
+            }
 
-            if (data.success) {
+            if (data && data.success) {
                 setDemoOtp(data.demo_otp); // For demo - remove in production
                 setError('');
             } else {
-                setError(data.error);
+                setError(data?.error || 'Failed to resend OTP. Please try again.');
             }
         } catch (err) {
             console.error('Error resending OTP:', err);
-            setError('Failed to resend OTP. Please try again.');
+            setError(err instanceof Error ? err.message : 'Failed to resend OTP. Please try again.');
         } finally {
             setLoading(false);
         }

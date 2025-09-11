@@ -144,7 +144,10 @@ function App() {
       setLoading(true);
       
       // Set user context for RLS
-      await supabase.rpc('set_current_user_id', { user_id: mobile });
+      const { error: contextError } = await supabase.rpc('set_current_user_id', { user_id: mobile });
+      if (contextError) {
+        console.error('Error setting user context:', contextError);
+      }
       
       let user = await getUser(mobile);
       if (!user) {
@@ -157,7 +160,7 @@ function App() {
       setCurrentUser(user);
     } catch (error) {
       console.error('Error during login:', error);
-      alert('Login failed. Please try again.');
+      alert(`Login failed: ${error instanceof Error ? error.message : 'Please try again.'}`);
     } finally {
       setLoading(false);
     }

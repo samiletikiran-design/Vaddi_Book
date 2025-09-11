@@ -31,7 +31,7 @@ export const getUser = async (mobile: string): Promise<User | null> => {
       return null;
     }
     console.error('Error fetching user:', error);
-    throw error;
+    throw new Error(`Failed to fetch user: ${error.message}`);
   }
 
   return {
