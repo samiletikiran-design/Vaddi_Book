@@ -10,10 +10,10 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         // Simple validation for mobile number format (e.g., 10 digits)
-        if (mobile.trim().match(/^\d{10,15}$/)) {
+        if (mobile.trim().length >= 10 && mobile.trim().match(/^\d+$/)) {
             onLogin(mobile.trim());
         } else {
-            alert('Please enter a valid mobile number (10-15 digits).');
+            alert('Please enter a valid mobile number (at least 10 digits).');
         }
     };
 

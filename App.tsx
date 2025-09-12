@@ -14,7 +14,7 @@ import { EditRepaymentForm } from './components/EditRepaymentForm';
 import { EditLendieForm } from './components/EditLendieForm';
 import { EditAccountForm } from './components/EditAccountForm';
 import { GlobalSummaryDashboard } from './components/GlobalSummaryDashboard';
-import { OTPLogin } from './components/OTPLogin';
+import { Login } from './components/Login';
 import { InterestCalculator } from './components/InterestCalculator';
 import { UpcomingPayments } from './components/UpcomingPayments';
 import {
@@ -149,49 +149,29 @@ function App() {
 
 
   const handleLogin = async (mobile: string) => {
-    if (!services) {
-      alert('Services not initialized. Please refresh the page.');
-      return;
-    }
-    
     try {
       setLoading(true);
       
-      // Set user context for RLS (only if using Supabase)
-      if (useSupabase && supabase) {
-        try {
-          const { error: contextError } = await supabase.rpc('set_current_user_id', { user_id: mobile });
-          if (contextError) {
-            console.error('Error setting user context:', contextError);
-          }
-        } catch (contextErr) {
-          console.warn('Could not set user context, continuing with login:', contextErr);
-        }
+      // Wait for services to be initialized
+      if (!services) {
+        const serviceModule = await importServices();
+        setServices(serviceModule);
       }
       
-      let user = await services.getUser(mobile);
+      const currentServices = services || await importServices();
+      
+      let user = await currentServices.getUser(mobile);
       if (!user) {
         // Create new user
         user = { mobile, name: 'Lender', currency: 'INR' };
-        await services.createOrUpdateUser(user);
+        await currentServices.createOrUpdateUser(user);
       }
 
       sessionStorage.setItem('lenders-ledger-user-mobile', mobile);
       setCurrentUser(user);
     } catch (error) {
       console.error('Error during login:', error);
-      // More specific error handling
-      let errorMessage = 'Please try again.';
-      if (error instanceof Error) {
-        if (error.message.includes('fetch')) {
-          errorMessage = 'Network error. Please check your connection and try again.';
-        } else if (error.message.includes('RPC')) {
-          errorMessage = 'Database connection issue. Please try again.';
-        } else {
-          errorMessage = error.message;
-        }
-      }
-      alert(`Login failed: ${errorMessage}`);
+      alert('Login failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -418,11 +398,7 @@ function App() {
   };
 
   if (!currentUser) {
-    // Use simple login if Supabase is not available
-    if (!useSupabase) {
-      return <Login onLogin={handleLogin} />;
-    }
-    return <OTPLogin onLogin={handleLogin} />;
+    return <Login onLogin={handleLogin} />;
   }
 
   const renderContent = () => {
