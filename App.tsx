@@ -159,9 +159,13 @@ function App() {
       
       // Set user context for RLS (only if using Supabase)
       if (useSupabase && supabase) {
-        const { error: contextError } = await supabase.rpc('set_current_user_id', { user_id: mobile });
-        if (contextError) {
-          console.error('Error setting user context:', contextError);
+        try {
+          const { error: contextError } = await supabase.rpc('set_current_user_id', { user_id: mobile });
+          if (contextError) {
+            console.error('Error setting user context:', contextError);
+          }
+        } catch (contextErr) {
+          console.warn('Could not set user context, continuing with login:', contextErr);
         }
       }
       
@@ -176,7 +180,18 @@ function App() {
       setCurrentUser(user);
     } catch (error) {
       console.error('Error during login:', error);
-      alert(`Login failed: ${error instanceof Error ? error.message : 'Please try again.'}`);
+      // More specific error handling
+      let errorMessage = 'Please try again.';
+      if (error instanceof Error) {
+        if (error.message.includes('fetch')) {
+          errorMessage = 'Network error. Please check your connection and try again.';
+        } else if (error.message.includes('RPC')) {
+          errorMessage = 'Database connection issue. Please try again.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      alert(`Login failed: ${errorMessage}`);
     } finally {
       setLoading(false);
     }

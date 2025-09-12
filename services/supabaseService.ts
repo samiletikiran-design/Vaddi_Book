@@ -3,6 +3,10 @@ import { Lendie, Loan, Repayment, User } from '../types';
 
 // User operations
 export const createOrUpdateUser = async (userData: User): Promise<void> => {
+  if (!supabase) {
+    throw new Error('Database not available');
+  }
+  
   const { error } = await supabase
     .from('users')
     .upsert({
@@ -19,6 +23,10 @@ export const createOrUpdateUser = async (userData: User): Promise<void> => {
 };
 
 export const getUser = async (mobile: string): Promise<User | null> => {
+  if (!supabase) {
+    throw new Error('Database not available');
+  }
+  
   const { data, error } = await supabase
     .from('users')
     .select('*')
