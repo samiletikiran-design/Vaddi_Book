@@ -15,28 +15,6 @@ import { EditLendieForm } from './components/EditLendieForm';
 import { EditAccountForm } from './components/EditAccountForm';
 import { GlobalSummaryDashboard } from './components/GlobalSummaryDashboard';
 import { Login } from './components/Login';
-import { InterestCalculator } from './components/InterestCalculator';
-import { UpcomingPayments } from './components/UpcomingPayments';
-import {
-    calculateGrandTotalPrincipal,
-    calculateGrandTotalInterest,
-    calculateGrandTotalRepayments,
-    getAllUpcomingPayments,
-    calculateInterestForLoan,
-    calculateRepaymentsForLoan,
-} from './services/calculationService';
-import { supabase } from './lib/supabase';
-
-// Import services based on Supabase availability
-const useSupabase = !!supabase;
-
-const importServices = async () => {
-  if (useSupabase) {
-    return await import('./services/supabaseService');
-  } else {
-    return await import('./services/localStorageService');
-  }
-};
 
 type ViewState = 
   | { name: 'LIST' }
