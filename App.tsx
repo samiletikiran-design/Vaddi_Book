@@ -232,12 +232,11 @@ function App() {
      if (view.name !== 'DASHBOARD' && view.name !== 'LOAN_DETAILS') {
       return;
     }
-    if (!services) return;
     
     if (window.confirm('Are you sure you want to archive this loan? It will be hidden from view and excluded from calculations.')) {
       try {
         setLoading(true);
-        await services.updateLoan(currentUser?.mobile, loanId, { isArchived: true });
+        await localStorageService.updateLoan(currentUser?.mobile, loanId, { isArchived: true });
         await loadLendiesData();
       } catch (error) {
         console.error('Error archiving loan:', error);
@@ -250,11 +249,10 @@ function App() {
 
   const handleUpdateLoan = async (updatedLoan: Loan) => {
     if (view.name !== 'DASHBOARD' && view.name !== 'LOAN_DETAILS') return;
-    if (!services) return;
     
     try {
       setLoading(true);
-      await services.updateLoan(currentUser?.mobile, updatedLoan.id, updatedLoan);
+      await localStorageService.updateLoan(currentUser?.mobile, updatedLoan.id, updatedLoan);
       await loadLendiesData();
       setModal('NONE');
       setEditingLoan(null);
@@ -274,11 +272,10 @@ function App() {
 
   const handleUpdateLendie = async (updatedData: Pick<Lendie, 'name' | 'mobile' | 'address' | 'photo'>) => {
     if (view.name !== 'DASHBOARD') return;
-    if (!services) return;
     
     try {
       setLoading(true);
-      await services.updateLendie(currentUser?.mobile, view.lendieId, updatedData);
+      await localStorageService.updateLendie(currentUser?.mobile, view.lendieId, updatedData);
       await loadLendiesData();
       setModal('NONE');
     } catch (error) {
@@ -290,12 +287,12 @@ function App() {
   };
 
   const handleUpdateAccount = async (updatedData: Pick<User, 'name' | 'currency'>) => {
-    if (!currentUser || !services) return;
+    if (!currentUser) return;
 
     try {
       setLoading(true);
       const updatedUser = { ...currentUser, ...updatedData };
-      await services.createOrUpdateUser(updatedUser);
+      await localStorageService.createOrUpdateUser(updatedUser);
       setCurrentUser(updatedUser);
       setModal('NONE');
     } catch (error) {
@@ -343,11 +340,10 @@ function App() {
 
   const handleUpdateRepayment = async (updatedRepayment: Repayment) => {
     if (view.name !== 'LOAN_DETAILS') return;
-    if (!services) return;
     
     try {
       setLoading(true);
-      await services.updateRepayment(currentUser?.mobile, updatedRepayment.id, updatedRepayment);
+      await localStorageService.updateRepayment(currentUser?.mobile, updatedRepayment.id, updatedRepayment);
       await loadLendiesData();
       setModal('NONE');
       setEditingRepayment(null);
@@ -361,11 +357,10 @@ function App() {
 
   const handleDeleteRepayment = async (repaymentId: string) => {
     if (view.name !== 'LOAN_DETAILS') return;
-    if (!services) return;
     
     try {
       setLoading(true);
-      await services.deleteRepayment(currentUser?.mobile, repaymentId);
+      await localStorageService.deleteRepayment(currentUser?.mobile, repaymentId);
       await loadLendiesData();
     } catch (error) {
       console.error('Error deleting repayment:', error);
