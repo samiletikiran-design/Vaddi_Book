@@ -14,7 +14,16 @@ import { EditRepaymentForm } from './components/EditRepaymentForm';
 import { EditLendieForm } from './components/EditLendieForm';
 import { EditAccountForm } from './components/EditAccountForm';
 import { GlobalSummaryDashboard } from './components/GlobalSummaryDashboard';
+import { UpcomingPayments } from './components/UpcomingPayments';
+import { InterestCalculator } from './components/InterestCalculator';
 import { Login } from './components/Login';
+import * as localStorageService from './services/localStorageService';
+import {
+  calculateGrandTotalPrincipal,
+  calculateGrandTotalInterest,
+  calculateGrandTotalRepayments,
+  getAllUpcomingPayments,
+} from './services/calculationService';
 
 type ViewState = 
   | { name: 'LIST' }
@@ -23,25 +32,6 @@ type ViewState =
   | { name: 'CLOSED_LOANS'; lendieId: string };
 
 type ModalState = 'NONE' | 'ADD_LENDIE_LOAN' | 'ADD_LOAN' | 'ADD_REPAYMENT' | 'EDIT_LOAN' | 'EDIT_LENDIE' | 'EDIT_ACCOUNT' | 'INTEREST_CALCULATOR' | 'EDIT_REPAYMENT';
-
-const getLendiesWithUpdatedLoanStatuses = (lendiesToUpdate: Lendie[]): Lendie[] => {
-    const today = new Date().toISOString().split('T')[0];
-    return lendiesToUpdate.map(lendie => ({
-        ...lendie,
-        loans: lendie.loans.map(loan => {
-            const repaymentsForLoan = lendie.repayments.filter(r => r.loanId === loan.id);
-            const interestAccrued = calculateInterestForLoan(loan, repaymentsForLoan, today);
-            const amountPaid = calculateRepaymentsForLoan(repaymentsForLoan);
-            const outstandingBalance = (loan.principal + interestAccrued) - amountPaid;
-
-            // Close the loan if the outstanding balance is less than 1 currency unit.
-            const newStatus = outstandingBalance < 1 ? 'CLOSED' : 'ACTIVE';
-            
-            return { ...loan, status: newStatus };
-        }),
-    }));
-};
-
 
 function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -53,16 +43,9 @@ function App() {
   const [editingRepayment, setEditingRepayment] = useState<Repayment | null>(null);
   const [upcomingPayments, setUpcomingPayments] = useState<UpcomingPayment[]>([]);
   const [repaymentTargetLoanId, setRepaymentTargetLoanId] = useState<string | undefined>();
-  const [services, setServices] = useState<any>(null);
 
   // Effect to check session and load user profile on initial mount
   useEffect(() => {
-    const initServices = async () => {
-      const serviceModule = await importServices();
-      setServices(serviceModule);
-    };
-    initServices();
-
     const userMobile = sessionStorage.getItem('lenders-ledger-user-mobile');
     if (userMobile) {
         loadUserProfile(userMobile);
@@ -70,17 +53,11 @@ function App() {
   }, []);
 
   const loadUserProfile = async (mobile: string) => {
-    if (!services) return;
-    
     try {
       setLoading(true);
-      const user = await services.getUser(mobile);
+      const user = await localStorageService.getUser(mobile);
       if (user) {
         setCurrentUser(user);
-        // Set user context for RLS (only if using Supabase)
-        if (useSupabase && supabase) {
-          await supabase.rpc('set_current_user_id', { user_id: mobile });
-        }
       } else {
         handleLogout();
       }
@@ -92,21 +69,21 @@ function App() {
     }
   };
 
-  // Effect to load lendie data from Supabase when user is set
+  // Effect to load lendie data when user is set
   useEffect(() => {
-    if (currentUser && services) {
+    if (currentUser) {
       loadLendiesData();
     } else {
       setLendies([]);
     }
-  }, [currentUser, services]);
+  }, [currentUser]);
 
   const loadLendiesData = async () => {
-    if (!currentUser || !services) return;
+    if (!currentUser) return;
     
     try {
       setLoading(true);
-      const lendiesData = await services.getLendies(currentUser.mobile);
+      const lendiesData = await localStorageService.getLendies(currentUser.mobile);
       setLendies(lendiesData);
     } catch (error) {
       console.error('Error loading lendies data:', error);
@@ -125,24 +102,15 @@ function App() {
     }
   }, [lendies]);
 
-
   const handleLogin = async (mobile: string) => {
     try {
       setLoading(true);
       
-      // Wait for services to be initialized
-      if (!services) {
-        const serviceModule = await importServices();
-        setServices(serviceModule);
-      }
-      
-      const currentServices = services || await importServices();
-      
-      let user = await currentServices.getUser(mobile);
+      let user = await localStorageService.getUser(mobile);
       if (!user) {
         // Create new user
         user = { mobile, name: 'Lender', currency: 'INR' };
-        await currentServices.createOrUpdateUser(user);
+        await localStorageService.createOrUpdateUser(user);
       }
 
       sessionStorage.setItem('lenders-ledger-user-mobile', mobile);
@@ -171,12 +139,12 @@ function App() {
   };
   
   const handleAddLendieAndLoan = async (lendieData: Omit<Lendie, 'id' | 'loans' | 'repayments'>, loanData: Omit<Loan, 'id'>) => {
-    if (!currentUser || !services) return;
+    if (!currentUser) return;
     
     try {
       setLoading(true);
-      const lendieId = await services.createLendie(currentUser.mobile, lendieData);
-      await services.createLoan(currentUser.mobile, lendieId, loanData);
+      const lendieId = await localStorageService.createLendie(currentUser.mobile, lendieData);
+      await localStorageService.createLoan(currentUser.mobile, lendieId, loanData);
       
       await loadLendiesData();
       setModal('NONE');
@@ -190,11 +158,11 @@ function App() {
   };
 
   const handleAddRepayment = async (lendieId: string, repaymentData: Omit<Repayment, 'id'>) => {
-    if (!currentUser || !services) return;
+    if (!currentUser) return;
     
     try {
       setLoading(true);
-      await services.createRepayment(currentUser.mobile, repaymentData);
+      await localStorageService.createRepayment(currentUser.mobile, repaymentData);
       await loadLendiesData();
       setModal('NONE');
       setRepaymentTargetLoanId(undefined);
@@ -207,12 +175,12 @@ function App() {
   };
   
   const handleAddNewLoan = async (loanData: Omit<Loan, 'id'>) => {
-    if (!currentUser || !services) return;
+    if (!currentUser) return;
     if (view.name !== 'DASHBOARD') return;
     
     try {
       setLoading(true);
-      await services.createLoan(currentUser.mobile, view.lendieId, loanData);
+      await localStorageService.createLoan(currentUser.mobile, view.lendieId, loanData);
       await loadLendiesData();
       setModal('NONE');
     } catch (error) {
