@@ -1,12 +1,15 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 
 interface ProfileDropdownProps {
   userName: string;
   onEditAccount: () => void;
   onLogout: () => void;
+  onViewLendies: () => void;
+  onViewLifetimeSummary: () => void;
 }
 
-export const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ userName, onEditAccount, onLogout }) => {
+export const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ userName, onEditAccount, onLogout, onViewLendies, onViewLifetimeSummary }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -43,9 +46,23 @@ export const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ userName, onEd
           aria-labelledby="menu-button"
         >
           <div className="py-1" role="none">
+             <button
+              onClick={() => { onViewLendies(); setIsOpen(false); }}
+              className="text-slate-700 block w-full text-left px-4 py-2 text-sm hover:bg-slate-100"
+              role="menuitem"
+            >
+              View All Lendies
+            </button>
+            <button
+              onClick={() => { onViewLifetimeSummary(); setIsOpen(false); }}
+              className="text-slate-700 block w-full text-left px-4 py-2 text-sm hover:bg-slate-100"
+              role="menuitem"
+            >
+              Lifetime Summary
+            </button>
             <button
               onClick={() => { onEditAccount(); setIsOpen(false); }}
-              className="text-slate-700 block w-full text-left px-4 py-2 text-sm hover:bg-slate-100"
+              className="text-slate-700 block w-full text-left px-4 py-2 text-sm hover:bg-slate-100 border-t border-slate-100"
               role="menuitem"
             >
               My Account

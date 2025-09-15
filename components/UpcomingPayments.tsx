@@ -51,7 +51,7 @@ export const UpcomingPayments: React.FC<UpcomingPaymentsProps> = ({ payments, cu
                     </p>
                 </div>
                 <div className="text-right">
-                    <p className={`text-lg font-bold ${payment.type === 'EMI' ? 'text-sky-600' : 'text-slate-800'}`}>
+                    <p className={`text-lg font-bold ${payment.type === 'EMI' ? 'text-brand-primary-dark' : 'text-slate-800'}`}>
                         {currency}{formatCurrency(payment.amount)}
                     </p>
                     <p className={`text-sm ${dateColor}`}>{payment.date}</p>

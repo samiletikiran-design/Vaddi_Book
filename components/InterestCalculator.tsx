@@ -79,9 +79,9 @@ export const InterestCalculator: React.FC<InterestCalculatorProps> = ({ onClose,
             
             <div className="pt-4 mt-4 border-t">
                 {calculatedInterest !== null ? (
-                    <div className="text-center bg-sky-50 p-4 rounded-lg">
+                    <div className="text-center bg-brand-primary-light p-4 rounded-lg">
                         <p className="text-sm text-slate-600">Calculated Interest</p>
-                        <p className="text-3xl font-bold text-sky-700">
+                        <p className="text-3xl font-bold text-brand-primary-dark">
                             {currencySymbol}{formatCurrency(calculatedInterest)}
                         </p>
                     </div>

@@ -1,5 +1,5 @@
 {
-  "name": "lender's-ledger",
+  "name": "vaddi-book",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -9,9 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.57.4",
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "react-dom": "^19.1.1",
+    "react": "^19.1.1"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

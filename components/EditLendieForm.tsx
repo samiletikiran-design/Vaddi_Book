@@ -36,7 +36,7 @@ export const EditLendieForm: React.FC<EditLendieFormProps> = ({ lendieToEdit, on
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
-            <h3 className="text-lg font-semibold text-slate-600 border-b pb-2">Lendie Details</h3>
+            <h3 className="text-lg font-semibold text-brand-secondary border-b pb-2">Lendie Details</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <input type="text" placeholder="Name*" value={name} onChange={e => setName(e.target.value)} className="p-2 border rounded" required />
                 <input type="text" placeholder="Mobile Number*" value={mobile} onChange={e => setMobile(e.target.value)} className="p-2 border rounded" required />
@@ -44,13 +44,13 @@ export const EditLendieForm: React.FC<EditLendieFormProps> = ({ lendieToEdit, on
             <textarea placeholder="Address (Optional)" value={address} onChange={e => setAddress(e.target.value)} className="p-2 border rounded w-full" />
             <div>
                 <label className="block text-sm font-medium text-slate-700">Photo (Optional)</label>
-                <input type="file" accept="image/*" onChange={handlePhotoChange} className="mt-1 block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100"/>
+                <input type="file" accept="image/*" onChange={handlePhotoChange} className="mt-1 block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-brand-primary-light file:text-brand-primary-dark hover:file:bg-brand-primary-light-hover"/>
             </div>
             {photo && <img src={photo} alt="Preview" className="w-24 h-24 rounded-full object-cover mx-auto" />}
             
             <div className="flex justify-end space-x-2 pt-4">
                 <button type="button" onClick={onClose} className="px-4 py-2 bg-slate-200 rounded-md text-slate-800 hover:bg-slate-300">Cancel</button>
-                <button type="submit" className="px-4 py-2 bg-brand-primary rounded-md text-white hover:bg-sky-600">Update Lendie</button>
+                <button type="submit" className="px-4 py-2 bg-brand-primary rounded-md text-white hover:bg-brand-primary-hover">Update Lendie</button>
             </div>
         </form>
     );

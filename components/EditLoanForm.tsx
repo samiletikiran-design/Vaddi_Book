@@ -50,7 +50,7 @@ export const EditLoanForm: React.FC<EditLoanFormProps> = ({ loanToEdit, onUpdate
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
-            <h3 className="text-lg font-semibold text-slate-600 border-b pb-2 pt-4">Loan Details</h3>
+            <h3 className="text-lg font-semibold text-brand-secondary border-b pb-2 pt-4">Loan Details</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <input type="number" placeholder="Principal Amount*" value={principal} onChange={e => setPrincipal(e.target.value)} className="p-2 border rounded" required />
                 <input type="number" placeholder="Interest Rate (%)*" value={interestRate} onChange={e => setInterestRate(e.target.value)} className="p-2 border rounded" required />
@@ -69,7 +69,7 @@ export const EditLoanForm: React.FC<EditLoanFormProps> = ({ loanToEdit, onUpdate
             </div>
              <div>
                 <label className="flex items-center space-x-2">
-                    <input type="checkbox" checked={isEmi} onChange={e => setIsEmi(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-sky-600 focus:ring-sky-500" />
+                    <input type="checkbox" checked={isEmi} onChange={e => setIsEmi(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-brand-primary focus:ring-brand-primary" />
                     <span className="font-semibold text-slate-700">EMI / Installment</span>
                 </label>
             </div>
@@ -95,7 +95,7 @@ export const EditLoanForm: React.FC<EditLoanFormProps> = ({ loanToEdit, onUpdate
             
             <div className="flex justify-end space-x-2 pt-4">
                 <button type="button" onClick={onClose} className="px-4 py-2 bg-slate-200 rounded-md text-slate-800 hover:bg-slate-300">Cancel</button>
-                <button type="submit" className="px-4 py-2 bg-brand-primary rounded-md text-white hover:bg-sky-600">Update Loan</button>
+                <button type="submit" className="px-4 py-2 bg-brand-primary rounded-md text-white hover:bg-brand-primary-hover">Update Loan</button>
             </div>
         </form>
     );

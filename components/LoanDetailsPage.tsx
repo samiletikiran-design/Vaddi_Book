@@ -64,7 +64,7 @@ export const LoanDetailsPage: React.FC<LoanDetailsPageProps> = ({
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <button onClick={onBack} className="flex items-center space-x-2 text-brand-primary hover:text-sky-700">
+        <button onClick={onBack} className="flex items-center space-x-2 text-brand-primary hover:text-brand-primary-hover">
            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
            <span>Back to {lendie.name}'s Dashboard</span>
         </button>
@@ -74,7 +74,7 @@ export const LoanDetailsPage: React.FC<LoanDetailsPageProps> = ({
         <div className="flex justify-between items-start">
             <div className="flex items-center space-x-4">
                 <div>
-                    <h2 className="text-2xl sm:text-3xl font-bold text-slate-800">Loan Details</h2>
+                    <h2 className="text-2xl sm:text-3xl font-bold text-brand-secondary">Loan Details</h2>
                     <p className="text-slate-500">Loan of {currency}{formatCurrency(loan.principal)} taken on {loan.loanDate}</p>
                 </div>
                 {statusBadge}
@@ -102,14 +102,14 @@ export const LoanDetailsPage: React.FC<LoanDetailsPageProps> = ({
       </div>
       
        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <SummaryCard title="Principal" amount={loan.principal} currency={currency} color="text-slate-700" />
+            <SummaryCard title="Principal" amount={loan.principal} currency={currency} color="text-brand-secondary" />
             <SummaryCard title="Interest Accrued" amount={interestAccrued} currency={currency} color="text-green-600" />
-            <SummaryCard title="Amount Paid" amount={amountPaid} currency={currency} color="text-sky-600" />
+            <SummaryCard title="Amount Paid" amount={amountPaid} currency={currency} color="text-brand-primary-dark" />
             <SummaryCard title="Outstanding Balance" amount={outstandingBalance} currency={currency} color="text-red-600" />
       </div>
 
       <div>
-        <h3 className="text-2xl font-bold text-slate-700 mb-4">Repayment History for this Loan</h3>
+        <h3 className="text-2xl font-bold text-brand-secondary mb-4">Repayment History for this Loan</h3>
         <div className="bg-white rounded-lg shadow-md">
             <ul className="divide-y divide-slate-200">
                 {repaymentsForLoan.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(repayment => (

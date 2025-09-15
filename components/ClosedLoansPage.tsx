@@ -29,7 +29,7 @@ const LoanDetailsCard: React.FC<LoanDetailsCardProps> = ({ loan, repayments, cur
     const outstandingBalance = (loan.principal + interestAccrued) - amountPaid;
 
     return (
-        <div onClick={() => onSelect(loan.id)} className="bg-white p-4 rounded-lg shadow-md flex flex-col justify-between cursor-pointer hover:shadow-lg hover:border-sky-500 border-2 border-transparent transition-all">
+        <div onClick={() => onSelect(loan.id)} className="bg-white p-4 rounded-lg shadow-md flex flex-col justify-between cursor-pointer hover:shadow-lg hover:border-brand-primary border-2 border-transparent transition-all">
             <div>
                 <div className="flex justify-between items-start mb-4">
                     <div>
@@ -47,9 +47,9 @@ const LoanDetailsCard: React.FC<LoanDetailsCardProps> = ({ loan, repayments, cur
                         <p className="text-xs text-green-700">Interest Accrued</p>
                         <p className="font-bold text-green-800">{currency}{formatCurrency(interestAccrued)}</p>
                     </div>
-                    <div className="bg-sky-50 p-2 rounded">
-                        <p className="text-xs text-sky-700">Amount Paid</p>
-                        <p className="font-bold text-sky-800">{currency}{formatCurrency(amountPaid)}</p>
+                    <div className="bg-brand-primary-light p-2 rounded">
+                        <p className="text-xs text-brand-primary-dark">Amount Paid</p>
+                        <p className="font-bold text-brand-primary-dark">{currency}{formatCurrency(amountPaid)}</p>
                     </div>
                 </div>
 
@@ -76,14 +76,14 @@ export const ClosedLoansPage: React.FC<ClosedLoansPageProps> = ({ lendie, curren
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
-                <button onClick={onBack} className="flex items-center space-x-2 text-brand-primary hover:text-sky-700">
+                <button onClick={onBack} className="flex items-center space-x-2 text-brand-primary hover:text-brand-primary-hover">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
                 <span>Back to {lendie.name}'s Dashboard</span>
                 </button>
             </div>
 
             <div>
-                <h3 className="text-2xl font-bold text-slate-700 mb-4">Closed Loans</h3>
+                <h3 className="text-2xl font-bold text-brand-secondary mb-4">Closed Loans</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {closedLoans.map(loan => {
                         const loanRepayments = lendie.repayments.filter(r => r.loanId === loan.id);

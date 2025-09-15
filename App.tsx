@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Lendie, Loan, Repayment, User, CURRENCIES, UpcomingPayment } from './types';
+import { INITIAL_LENDIES } from './constants';
 import { LendieList } from './components/LendieList';
 import { LendieDashboard } from './components/LendieDashboard';
 import { LoanDetailsPage } from './components/LoanDetailsPage';
@@ -14,29 +15,58 @@ import { EditRepaymentForm } from './components/EditRepaymentForm';
 import { EditLendieForm } from './components/EditLendieForm';
 import { EditAccountForm } from './components/EditAccountForm';
 import { GlobalSummaryDashboard } from './components/GlobalSummaryDashboard';
-import { UpcomingPayments } from './components/UpcomingPayments';
-import { InterestCalculator } from './components/InterestCalculator';
 import { Login } from './components/Login';
-import * as localStorageService from './services/localStorageService';
+import { InterestCalculator } from './components/InterestCalculator';
+import { UpcomingPayments } from './components/UpcomingPayments';
+import { LifetimeSummaryPage } from './components/LifetimeSummaryPage';
+import { VADDI_BOOK_LOGO } from './assets/logo';
 import {
-  calculateGrandTotalPrincipal,
-  calculateGrandTotalInterest,
-  calculateGrandTotalRepayments,
-  getAllUpcomingPayments,
+    calculateGrandTotalPrincipal,
+    calculateGrandTotalInterest,
+    calculateGrandTotalRepayments,
+    getAllUpcomingPayments,
+    calculateInterestForLoan,
+    calculateRepaymentsForLoan,
+    calculateGrandLifetimeTotalPrincipal,
+    calculateGrandLifetimeTotalInterest,
+    calculateGrandLifetimeTotalRepayments,
 } from './services/calculationService';
+
 
 type ViewState = 
   | { name: 'LIST' }
+  | { name: 'ALL_LENDIES' }
   | { name: 'DASHBOARD'; lendieId: string }
   | { name: 'LOAN_DETAILS'; lendieId: string; loanId: string }
-  | { name: 'CLOSED_LOANS'; lendieId: string };
+  | { name: 'CLOSED_LOANS'; lendieId: string }
+  | { name: 'LIFETIME_SUMMARY' };
 
 type ModalState = 'NONE' | 'ADD_LENDIE_LOAN' | 'ADD_LOAN' | 'ADD_REPAYMENT' | 'EDIT_LOAN' | 'EDIT_LENDIE' | 'EDIT_ACCOUNT' | 'INTEREST_CALCULATOR' | 'EDIT_REPAYMENT';
+
+const getLendiesWithUpdatedLoanStatuses = (lendiesToUpdate: Lendie[]): Lendie[] => {
+    const today = new Date().toISOString().split('T')[0];
+    return lendiesToUpdate.map(lendie => ({
+        ...lendie,
+        loans: lendie.loans.map(loan => {
+            if (loan.status === 'CLOSED') return loan; // Don't reopen a closed loan
+            
+            const repaymentsForLoan = lendie.repayments.filter(r => r.loanId === loan.id);
+            const interestAccrued = calculateInterestForLoan(loan, repaymentsForLoan, today);
+            const amountPaid = calculateRepaymentsForLoan(repaymentsForLoan);
+            const outstandingBalance = (loan.principal + interestAccrued) - amountPaid;
+
+            // Close the loan if the outstanding balance is less than 1 currency unit.
+            const newStatus = outstandingBalance < 1 ? 'CLOSED' : 'ACTIVE';
+            
+            return { ...loan, status: newStatus };
+        }),
+    }));
+};
+
 
 function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [lendies, setLendies] = useState<Lendie[]>([]);
-  const [loading, setLoading] = useState(false);
   const [view, setView] = useState<ViewState>({ name: 'LIST' });
   const [modal, setModal] = useState<ModalState>('NONE');
   const [editingLoan, setEditingLoan] = useState<Loan | null>(null);
@@ -46,85 +76,87 @@ function App() {
 
   // Effect to check session and load user profile on initial mount
   useEffect(() => {
-    const userMobile = sessionStorage.getItem('lenders-ledger-user-mobile');
+    const userMobile = sessionStorage.getItem('vaddi-book-user-mobile');
     if (userMobile) {
-        loadUserProfile(userMobile);
+        const profilesData = localStorage.getItem('vaddi-book-profiles');
+        const profiles: Record<string, User> = profilesData ? JSON.parse(profilesData) : {};
+        const userProfile = profiles[userMobile];
+
+        if (userProfile) {
+            setCurrentUser(userProfile);
+        } else {
+            // Profile not found, clear session
+            handleLogout();
+        }
     }
   }, []);
 
-  const loadUserProfile = async (mobile: string) => {
-    try {
-      setLoading(true);
-      const user = await localStorageService.getUser(mobile);
-      if (user) {
-        setCurrentUser(user);
-      } else {
-        handleLogout();
-      }
-    } catch (error) {
-      console.error('Error loading user profile:', error);
-      handleLogout();
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  // Effect to load lendie data when user is set
+  // Effect to load lendie data from localStorage when user is set
   useEffect(() => {
     if (currentUser) {
-      loadLendiesData();
+      const dataKey = `vaddi-book-data-${currentUser.mobile}`;
+      try {
+        const savedData = localStorage.getItem(dataKey);
+        if (savedData) {
+          setLendies(JSON.parse(savedData));
+        } else {
+          setLendies(INITIAL_LENDIES);
+        }
+      } catch (error) {
+        console.error("Failed to parse lendies data from localStorage", error);
+        setLendies(INITIAL_LENDIES);
+      }
     } else {
       setLendies([]);
     }
   }, [currentUser]);
 
-  const loadLendiesData = async () => {
-    if (!currentUser) return;
-    
-    try {
-      setLoading(true);
-      const lendiesData = await localStorageService.getLendies(currentUser.mobile);
-      setLendies(lendiesData);
-    } catch (error) {
-      console.error('Error loading lendies data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Effect to recalculate upcoming payments when lendies change
+  // Effect to save lendie data to localStorage whenever it changes
+  // Also recalculates upcoming payments
   useEffect(() => {
-    if (currentUser && lendies.length >= 0) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const payments = getAllUpcomingPayments(lendies, today);
-      setUpcomingPayments(payments);
-    }
-  }, [lendies]);
+    if (currentUser) {
+       try {
+            const updatedLendies = getLendiesWithUpdatedLoanStatuses(lendies);
+            const dataKey = `vaddi-book-data-${currentUser.mobile}`;
+            localStorage.setItem(dataKey, JSON.stringify(updatedLendies));
 
-  const handleLogin = async (mobile: string) => {
-    try {
-      setLoading(true);
-      
-      let user = await localStorageService.getUser(mobile);
-      if (!user) {
-        // Create new user
-        user = { mobile, name: 'Lender', currency: 'INR' };
-        await localStorageService.createOrUpdateUser(user);
-      }
+            // Recalculate upcoming payments
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const payments = getAllUpcomingPayments(updatedLendies, today);
+            setUpcomingPayments(payments);
 
-      sessionStorage.setItem('lenders-ledger-user-mobile', mobile);
-      setCurrentUser(user);
-    } catch (error) {
-      console.error('Error during login:', error);
-      alert('Login failed. Please try again.');
-    } finally {
-      setLoading(false);
+            // If the lendies state was updated, reflect it.
+            // This avoids a flicker or stale state issue.
+            if (JSON.stringify(lendies) !== JSON.stringify(updatedLendies)) {
+                 setLendies(updatedLendies);
+            }
+
+       } catch (error) {
+            console.error("Failed to save lendies data to localStorage", error);
+       }
     }
+  }, [lendies, currentUser]);
+
+
+  const handleLogin = (mobile: string) => {
+    const profilesData = localStorage.getItem('vaddi-book-profiles');
+    const profiles: Record<string, User> = profilesData ? JSON.parse(profilesData) : {};
+    
+    let user = profiles[mobile];
+    if (!user) {
+      user = { mobile, name: 'Lender', currency: 'INR' }; // Create new user with default name and currency
+      profiles[mobile] = user;
+      localStorage.setItem('vaddi-book-profiles', JSON.stringify(profiles));
+    }
+
+    sessionStorage.setItem('vaddi-book-user-mobile', mobile);
+    setCurrentUser(user);
   };
 
   const handleLogout = () => {
-    sessionStorage.removeItem('lenders-ledger-user-mobile');
+    sessionStorage.removeItem('vaddi-book-user-mobile');
     setCurrentUser(null);
     setView({ name: 'LIST' });
     setModal('NONE');
@@ -138,98 +170,91 @@ function App() {
     setView({ name: 'LIST' });
   };
   
-  const handleAddLendieAndLoan = async (lendieData: Omit<Lendie, 'id' | 'loans' | 'repayments'>, loanData: Omit<Loan, 'id'>) => {
-    if (!currentUser) return;
-    
-    try {
-      setLoading(true);
-      const lendieId = await localStorageService.createLendie(currentUser.mobile, lendieData);
-      await localStorageService.createLoan(currentUser.mobile, lendieId, loanData);
-      
-      await loadLendiesData();
-      setModal('NONE');
-      setView({ name: 'DASHBOARD', lendieId });
-    } catch (error) {
-      console.error('Error adding lendie and loan:', error);
-      alert('Failed to add lendie and loan. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+  const handleViewAllLendies = () => {
+      setView({ name: 'ALL_LENDIES' });
   };
 
-  const handleAddRepayment = async (lendieId: string, repaymentData: Omit<Repayment, 'id'>) => {
-    if (!currentUser) return;
-    
-    try {
-      setLoading(true);
-      await localStorageService.createRepayment(currentUser.mobile, repaymentData);
-      await loadLendiesData();
-      setModal('NONE');
-      setRepaymentTargetLoanId(undefined);
-    } catch (error) {
-      console.error('Error adding repayment:', error);
-      alert('Failed to add repayment. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+  const handleViewLifetimeSummary = () => {
+    setView({ name: 'LIFETIME_SUMMARY' });
   };
+
+  const handleAddLendieAndLoan = (lendieData: Omit<Lendie, 'id' | 'loans' | 'repayments'>, loanData: Omit<Loan, 'id'>) => {
+    const newLendie: Lendie = {
+        ...lendieData,
+        id: `lendie-${Date.now()}`,
+        repayments: [],
+        loans: [{ ...loanData, id: `loan-${Date.now()}` }],
+    };
+    setLendies(prev => [...prev, newLendie]);
+    setModal('NONE');
+    setView({ name: 'DASHBOARD', lendieId: newLendie.id });
+  };
+
+  const handleAddRepayment = (lendieId: string, repaymentData: Omit<Repayment, 'id'>) => {
+     setLendies(prevLendies => prevLendies.map(lendie => {
+        if (lendie.id === lendieId) {
+            const newRepayment = { ...repaymentData, id: `repay-${Date.now()}`};
+            return { ...lendie, repayments: [...lendie.repayments, newRepayment] };
+        }
+        return lendie;
+    }));
+     setModal('NONE');
+     setRepaymentTargetLoanId(undefined);
+  }
   
-  const handleAddNewLoan = async (loanData: Omit<Loan, 'id'>) => {
-    if (!currentUser) return;
+  const handleAddNewLoan = (loanData: Omit<Loan, 'id'>) => {
     if (view.name !== 'DASHBOARD') return;
-    
-    try {
-      setLoading(true);
-      await localStorageService.createLoan(currentUser.mobile, view.lendieId, loanData);
-      await loadLendiesData();
-      setModal('NONE');
-    } catch (error) {
-      console.error('Error adding loan:', error);
-      alert('Failed to add loan. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
+     setLendies(prevLendies => prevLendies.map(lendie => {
+        if (lendie.id === view.lendieId) {
+            const newLoan = { ...loanData, id: `loan-${Date.now()}`};
+            return { ...lendie, loans: [...lendie.loans, newLoan] };
+        }
+        return lendie;
+     }));
+     setModal('NONE');
+  }
 
   const handleOpenEditLoanModal = (loan: Loan) => {
     setEditingLoan(loan);
     setModal('EDIT_LOAN');
   };
 
-  const handleDeleteLoan = async (loanId: string) => {
+  const handleDeleteLoan = (loanId: string) => {
      if (view.name !== 'DASHBOARD' && view.name !== 'LOAN_DETAILS') {
       return;
     }
-    
+    const { lendieId } = view;
     if (window.confirm('Are you sure you want to archive this loan? It will be hidden from view and excluded from calculations.')) {
-      try {
-        setLoading(true);
-        await localStorageService.updateLoan(currentUser?.mobile, loanId, { isArchived: true });
-        await loadLendiesData();
-      } catch (error) {
-        console.error('Error archiving loan:', error);
-        alert('Failed to archive loan. Please try again.');
-      } finally {
-        setLoading(false);
-      }
+      setLendies(prevLendies =>
+        prevLendies.map(lendie => {
+          if (lendie.id === lendieId) {
+            const updatedLoans = lendie.loans.map(loan => {
+                if (loan.id === loanId) {
+                    return { ...loan, isArchived: true };
+                }
+                return loan;
+            });
+            return { ...lendie, loans: updatedLoans };
+          }
+          return lendie;
+        })
+      );
     }
   };
 
-  const handleUpdateLoan = async (updatedLoan: Loan) => {
+  const handleUpdateLoan = (updatedLoan: Loan) => {
     if (view.name !== 'DASHBOARD' && view.name !== 'LOAN_DETAILS') return;
-    
-    try {
-      setLoading(true);
-      await localStorageService.updateLoan(currentUser?.mobile, updatedLoan.id, updatedLoan);
-      await loadLendiesData();
-      setModal('NONE');
-      setEditingLoan(null);
-    } catch (error) {
-      console.error('Error updating loan:', error);
-      alert('Failed to update loan. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+    setLendies(prevLendies => prevLendies.map(lendie => {
+        if (lendie.id === view.lendieId) {
+          return { 
+            ...lendie, 
+            loans: lendie.loans.map(loan => loan.id === updatedLoan.id ? updatedLoan : loan)
+          };
+        }
+        return lendie;
+      }));
+    setModal('NONE');
+    setEditingLoan(null);
   };
   
   const handleOpenEditLendieModal = () => {
@@ -238,37 +263,33 @@ function App() {
     }
   };
 
-  const handleUpdateLendie = async (updatedData: Pick<Lendie, 'name' | 'mobile' | 'address' | 'photo'>) => {
+  const handleUpdateLendie = (updatedData: Pick<Lendie, 'name' | 'mobile' | 'address' | 'photo'>) => {
     if (view.name !== 'DASHBOARD') return;
-    
-    try {
-      setLoading(true);
-      await localStorageService.updateLendie(currentUser?.mobile, view.lendieId, updatedData);
-      await loadLendiesData();
-      setModal('NONE');
-    } catch (error) {
-      console.error('Error updating lendie:', error);
-      alert('Failed to update lendie. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+    setLendies(prevLendies => prevLendies.map(lendie => {
+      if (lendie.id === view.lendieId) {
+        return { 
+          ...lendie,
+          ...updatedData
+        };
+      }
+      return lendie;
+    }));
+    setModal('NONE');
   };
 
-  const handleUpdateAccount = async (updatedData: Pick<User, 'name' | 'currency'>) => {
+  const handleUpdateAccount = (updatedData: Pick<User, 'name' | 'currency'>) => {
     if (!currentUser) return;
 
-    try {
-      setLoading(true);
-      const updatedUser = { ...currentUser, ...updatedData };
-      await localStorageService.createOrUpdateUser(updatedUser);
-      setCurrentUser(updatedUser);
-      setModal('NONE');
-    } catch (error) {
-      console.error('Error updating account:', error);
-      alert('Failed to update account. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+    const updatedUser = { ...currentUser, ...updatedData };
+    
+    const profilesData = localStorage.getItem('vaddi-book-profiles');
+    const profiles: Record<string, User> = profilesData ? JSON.parse(profilesData) : {};
+    
+    profiles[currentUser.mobile] = updatedUser;
+    localStorage.setItem('vaddi-book-profiles', JSON.stringify(profiles));
+    
+    setCurrentUser(updatedUser);
+    setModal('NONE');
   };
 
   const handleOpenRepaymentModal = (loanId?: string) => {
@@ -306,36 +327,32 @@ function App() {
     setModal('EDIT_REPAYMENT');
   };
 
-  const handleUpdateRepayment = async (updatedRepayment: Repayment) => {
+  const handleUpdateRepayment = (updatedRepayment: Repayment) => {
     if (view.name !== 'LOAN_DETAILS') return;
-    
-    try {
-      setLoading(true);
-      await localStorageService.updateRepayment(currentUser?.mobile, updatedRepayment.id, updatedRepayment);
-      await loadLendiesData();
-      setModal('NONE');
-      setEditingRepayment(null);
-    } catch (error) {
-      console.error('Error updating repayment:', error);
-      alert('Failed to update repayment. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+    setLendies(prevLendies => prevLendies.map(lendie => {
+        if (lendie.id === view.lendieId) {
+          return {
+            ...lendie,
+            repayments: lendie.repayments.map(r => r.id === updatedRepayment.id ? updatedRepayment : r)
+          };
+        }
+        return lendie;
+      }));
+    setModal('NONE');
+    setEditingRepayment(null);
   };
 
-  const handleDeleteRepayment = async (repaymentId: string) => {
+  const handleDeleteRepayment = (repaymentId: string) => {
     if (view.name !== 'LOAN_DETAILS') return;
-    
-    try {
-      setLoading(true);
-      await localStorageService.deleteRepayment(currentUser?.mobile, repaymentId);
-      await loadLendiesData();
-    } catch (error) {
-      console.error('Error deleting repayment:', error);
-      alert('Failed to delete repayment. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+    setLendies(prevLendies => prevLendies.map(lendie => {
+        if (lendie.id === view.lendieId) {
+          return {
+            ...lendie,
+            repayments: lendie.repayments.filter(r => r.id !== repaymentId)
+          };
+        }
+        return lendie;
+      }));
   };
 
   if (!currentUser) {
@@ -343,6 +360,37 @@ function App() {
   }
 
   const renderContent = () => {
+    if (view.name === 'ALL_LENDIES') {
+        return (
+            <>
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-2xl font-bold text-brand-secondary">All Saved Lendies</h2>
+                    <button onClick={handleBackToList} className="text-sm font-semibold text-brand-primary hover:text-brand-primary-hover hover:underline">
+                        View Active Lendies
+                    </button>
+                </div>
+                <LendieList
+                    lendies={lendies}
+                    onSelectLendie={handleSelectLendie}
+                    currency={CURRENCIES[currentUser.currency]}
+                    showAll={true}
+                />
+            </>
+        );
+    }
+    if (view.name === 'LIFETIME_SUMMARY') {
+        const today = new Date().toISOString().split('T')[0];
+        const lifetimeLent = calculateGrandLifetimeTotalPrincipal(lendies);
+        const lifetimeInterest = calculateGrandLifetimeTotalInterest(lendies, today);
+        const lifetimeRepaid = calculateGrandLifetimeTotalRepayments(lendies);
+        return <LifetimeSummaryPage 
+            totalLent={lifetimeLent}
+            totalInterest={lifetimeInterest}
+            totalRepaid={lifetimeRepaid}
+            currency={CURRENCIES[currentUser.currency]}
+            onBack={handleBackToList}
+        />
+    }
     if (view.name === 'LOAN_DETAILS') {
       const currentLendie = lendies.find(l => l.id === view.lendieId);
       const currentLoan = currentLendie?.loans.find(l => l.id === view.loanId);
@@ -405,7 +453,12 @@ function App() {
                 totalRepaid={totalRepaid}
                 currency={CURRENCIES[currentUser.currency]}
             />
-            <LendieList lendies={lendies} onSelectLendie={handleSelectLendie} currency={CURRENCIES[currentUser.currency]} />
+            <LendieList 
+                lendies={lendies} 
+                onSelectLendie={handleSelectLendie} 
+                currency={CURRENCIES[currentUser.currency]} 
+                onAddNewLendie={() => setModal('ADD_LENDIE_LOAN')}
+            />
         </>
     );
   };
@@ -413,27 +466,19 @@ function App() {
   const currentLendieForModal = (view.name === 'DASHBOARD' || view.name === 'LOAN_DETAILS' || view.name === 'CLOSED_LOANS') ? lendies.find(l => l.id === view.lendieId) : undefined;
   const currentLoanForModal = (view.name === 'LOAN_DETAILS' && currentLendieForModal) ? currentLendieForModal.loans.find(l => l.id === view.loanId) : undefined;
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-primary mx-auto mb-4"></div>
-          <p className="text-slate-600">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-slate-100 font-sans">
         <header className="bg-white shadow-sm">
             <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-                <h1 className="text-2xl font-bold text-brand-primary">Lender's Ledger</h1>
+                <div onClick={handleBackToList} className="flex items-center space-x-3 cursor-pointer">
+                    <img src={VADDI_BOOK_LOGO} alt="Vaddi Book Logo" className="h-10 w-10" />
+                    <h1 className="text-2xl font-bold text-brand-primary">Vaddi Book</h1>
+                </div>
                  <div className="flex items-center space-x-4">
                      {view.name === 'LIST' && (
-                        <button onClick={() => setModal('ADD_LENDIE_LOAN')} className="px-4 py-2 bg-brand-primary rounded-md text-white hover:bg-sky-600 flex items-center space-x-2">
+                        <button onClick={() => setModal('ADD_LENDIE_LOAN')} className="px-4 py-2 bg-brand-primary rounded-md text-white hover:bg-brand-primary-hover flex items-center space-x-2">
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" /></svg>
-                           <span className="hidden sm:inline">{loading ? 'Loading...' : 'Add New Lendie'}</span>
+                            <span className="hidden sm:inline">Add New Lendie</span>
                         </button>
                     )}
                     <button onClick={() => setModal('INTEREST_CALCULATOR')} className="p-2 bg-slate-100 rounded-full hover:bg-slate-200 transition-colors" aria-label="Interest Calculator">
@@ -445,6 +490,8 @@ function App() {
                         userName={currentUser.name}
                         onEditAccount={() => setModal('EDIT_ACCOUNT')}
                         onLogout={handleLogout}
+                        onViewLendies={handleViewAllLendies}
+                        onViewLifetimeSummary={handleViewLifetimeSummary}
                     />
                 </div>
             </div>

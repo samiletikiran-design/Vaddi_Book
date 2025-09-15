@@ -1,5 +1,5 @@
 {
-  "name": "Lender's Ledger",
-  "description": "A simple and powerful ledger for individuals to track money lent to others. Manage lendies, loans, repayments, and see interest calculations in real-time on a clean dashboard.",
+  "name": "Vaddi Book",
+  "description": "Vaddi Book is a simple and powerful ledger for individuals to track money lent to others. Manage lendies, loans, repayments, and see interest calculations in real-time on a clean dashboard.",
   "requestFramePermissions": []
 }

@@ -47,7 +47,7 @@ const LoanDetailsCard: React.FC<LoanDetailsCardProps> = ({ loan, repayments, cur
     const outstandingBalance = (loan.principal + interestAccrued) - amountPaid;
 
     return (
-        <div onClick={() => onSelect(loan.id)} className="bg-white p-4 rounded-lg shadow-md flex flex-col justify-between cursor-pointer hover:shadow-lg hover:border-sky-500 border-2 border-transparent transition-all">
+        <div onClick={() => onSelect(loan.id)} className="bg-white p-4 rounded-lg shadow-md flex flex-col justify-between cursor-pointer hover:shadow-lg hover:border-brand-primary border-2 border-transparent transition-all">
             <div>
                 <div className="flex justify-between items-start mb-4">
                     <div>
@@ -65,9 +65,9 @@ const LoanDetailsCard: React.FC<LoanDetailsCardProps> = ({ loan, repayments, cur
                         <p className="text-xs text-green-700">Interest Accrued</p>
                         <p className="font-bold text-green-800">{currency}{formatCurrency(interestAccrued)}</p>
                     </div>
-                    <div className="bg-sky-50 p-2 rounded">
-                        <p className="text-xs text-sky-700">Amount Paid</p>
-                        <p className="font-bold text-sky-800">{currency}{formatCurrency(amountPaid)}</p>
+                    <div className="bg-brand-primary-light p-2 rounded">
+                        <p className="text-xs text-brand-primary-dark">Amount Paid</p>
+                        <p className="font-bold text-brand-primary-dark">{currency}{formatCurrency(amountPaid)}</p>
                     </div>
                 </div>
 
@@ -118,12 +118,12 @@ export const LendieDashboard: React.FC<LendieDashboardProps> = ({ lendie, curren
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <button onClick={onBack} className="flex items-center space-x-2 text-brand-primary hover:text-sky-700">
+        <button onClick={onBack} className="flex items-center space-x-2 text-brand-primary hover:text-brand-primary-hover">
            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
            <span>Back to List</span>
         </button>
         <div className="flex space-x-2">
-            <button onClick={onOpenAddLoanModal} className="px-4 py-2 bg-sky-100 text-sky-700 rounded-md text-sm font-semibold hover:bg-sky-200">Add New Loan</button>
+            <button onClick={onOpenAddLoanModal} className="px-4 py-2 bg-brand-primary-light text-brand-primary-dark rounded-md text-sm font-semibold hover:bg-brand-primary-light-hover">Add New Loan</button>
             <button onClick={() => onOpenRepaymentModal()} className="px-4 py-2 bg-green-100 text-green-700 rounded-md text-sm font-semibold hover:bg-green-200">Record Repayment</button>
         </div>
       </div>
@@ -131,7 +131,7 @@ export const LendieDashboard: React.FC<LendieDashboardProps> = ({ lendie, curren
       <div className="flex items-center space-x-6 bg-white p-6 rounded-lg shadow-md relative">
          <img src={lendie.photo || `https://i.pravatar.cc/150?u=${lendie.id}`} alt={lendie.name} className="w-24 h-24 rounded-full object-cover" />
          <div>
-            <h2 className="text-3xl font-bold text-slate-800">{lendie.name}</h2>
+            <h2 className="text-3xl font-bold text-brand-secondary">{lendie.name}</h2>
             <p className="text-slate-500">{lendie.mobile}</p>
             <p className="text-slate-500">{lendie.address}</p>
          </div>
@@ -148,9 +148,9 @@ export const LendieDashboard: React.FC<LendieDashboardProps> = ({ lendie, curren
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <SummaryCard title="Total Principal" amount={totalPrincipal} currency={currency} color="text-slate-700" />
+        <SummaryCard title="Total Principal" amount={totalPrincipal} currency={currency} color="text-brand-secondary" />
         <SummaryCard title="Interest Accrued" amount={totalInterest} currency={currency} color="text-green-600" />
-        <SummaryCard title="Amount Paid" amount={totalRepayments} currency={currency} color="text-sky-600" />
+        <SummaryCard title="Amount Paid" amount={totalRepayments} currency={currency} color="text-brand-primary-dark" />
         <SummaryCard title="Outstanding Balance" amount={outstandingBalance} currency={currency} color="text-red-600" />
       </div>
 
@@ -158,9 +158,9 @@ export const LendieDashboard: React.FC<LendieDashboardProps> = ({ lendie, curren
 
       <div>
         <div className="flex justify-between items-center mb-4">
-            <h3 className="text-2xl font-bold text-slate-700">Active Loans</h3>
+            <h3 className="text-2xl font-bold text-brand-secondary">Active Loans</h3>
             {closedLoansCount > 0 && (
-                <button onClick={onViewClosedLoans} className="text-sm font-semibold text-brand-primary hover:text-sky-700 hover:underline">
+                <button onClick={onViewClosedLoans} className="text-sm font-semibold text-brand-primary hover:text-brand-primary-hover hover:underline">
                     View {closedLoansCount} Closed Loan(s)
                 </button>
             )}
@@ -180,7 +180,7 @@ export const LendieDashboard: React.FC<LendieDashboardProps> = ({ lendie, curren
       </div>
       
        <div>
-            <h3 className="text-2xl font-bold text-slate-700 mb-4">Transaction History</h3>
+            <h3 className="text-2xl font-bold text-brand-secondary mb-4">Transaction History</h3>
             <div className="bg-white rounded-lg shadow-md">
                 <ul className="divide-y divide-slate-200">
                     {allTransactions.map(tx => (

@@ -156,23 +156,33 @@ export const calculateEmiAmount = (loan: Loan): number => {
 };
 
 
+// Calculates total principal for ACTIVE loans only.
 export const calculateTotalPrincipal = (lendie: Lendie): number => {
     return lendie.loans
-        .filter(loan => !loan.isArchived)
+        .filter(loan => !loan.isArchived && loan.status === 'ACTIVE')
         .reduce((acc, loan) => acc + loan.principal, 0);
 };
 
+// Calculates total repayments made towards ACTIVE loans only.
 export const calculateTotalRepayments = (lendie: Lendie): number => {
-    return lendie.repayments.reduce((acc, repayment) => acc + repayment.amount, 0);
+    const activeLoanIds = new Set(
+        lendie.loans
+            .filter(loan => loan.status === 'ACTIVE' && !loan.isArchived)
+            .map(loan => loan.id)
+    );
+    return lendie.repayments
+        .filter(repayment => activeLoanIds.has(repayment.loanId))
+        .reduce((acc, repayment) => acc + repayment.amount, 0);
 };
 
 export const calculateRepaymentsForLoan = (repaymentsForLoan: Repayment[]): number => {
     return repaymentsForLoan.reduce((acc, repayment) => acc + repayment.amount, 0);
 };
 
+// Calculates total interest for ACTIVE loans only.
 export const calculateTotalInterest = (lendie: Lendie, untilDateStr: string): number => {
     return lendie.loans
-        .filter(loan => !loan.isArchived)
+        .filter(loan => !loan.isArchived && loan.status === 'ACTIVE')
         .reduce((acc, loan) => {
             const loanRepayments = lendie.repayments.filter(r => r.loanId === loan.id);
             return acc + calculateInterestForLoan(loan, loanRepayments, untilDateStr);
@@ -192,7 +202,7 @@ export const getNextDueDate = (lendie: Lendie): string | null => {
     return futureDueDates.length > 0 ? futureDueDates[0] : null;
 };
 
-// New functions for global calculations
+// Functions for global calculations on ACTIVE loans
 export const calculateGrandTotalPrincipal = (lendies: Lendie[]): number => {
     return lendies.reduce((acc, lendie) => acc + calculateTotalPrincipal(lendie), 0);
 };
@@ -204,6 +214,36 @@ export const calculateGrandTotalInterest = (lendies: Lendie[], untilDateStr: str
 export const calculateGrandTotalRepayments = (lendies: Lendie[]): number => {
     return lendies.reduce((acc, lendie) => acc + calculateTotalRepayments(lendie), 0);
 };
+
+// Functions for LIFETIME global calculations (all loans)
+export const calculateGrandLifetimeTotalPrincipal = (lendies: Lendie[]): number => {
+    return lendies.reduce((acc, lendie) => {
+        const lendiePrincipal = lendie.loans
+            .filter(loan => !loan.isArchived)
+            .reduce((sum, loan) => sum + loan.principal, 0);
+        return acc + lendiePrincipal;
+    }, 0);
+};
+
+export const calculateGrandLifetimeTotalInterest = (lendies: Lendie[], untilDateStr: string): number => {
+    return lendies.reduce((acc, lendie) => {
+        const lendieInterest = lendie.loans
+            .filter(loan => !loan.isArchived)
+            .reduce((sum, loan) => {
+                const loanRepayments = lendie.repayments.filter(r => r.loanId === loan.id);
+                return sum + calculateInterestForLoan(loan, loanRepayments, untilDateStr);
+            }, 0);
+        return acc + lendieInterest;
+    }, 0);
+};
+
+export const calculateGrandLifetimeTotalRepayments = (lendies: Lendie[]): number => {
+    return lendies.reduce((acc, lendie) => {
+        const lendieRepayments = lendie.repayments.reduce((sum, repayment) => sum + repayment.amount, 0);
+        return acc + lendieRepayments;
+    }, 0);
+};
+
 
 const addPeriods = (date: Date, frequency: EmiFrequency, count: number): Date => {
     const newDate = new Date(date);
@@ -228,8 +268,9 @@ export const getAllUpcomingPayments = (lendies: Lendie[], today: Date): Upcoming
     windowEnd.setDate(today.getDate() + 30); // Look 30 days into the future
 
     lendies.forEach(lendie => {
+        const loanRepayments = lendie.repayments;
         lendie.loans.forEach(loan => {
-            if (loan.isArchived) return;
+            if (loan.isArchived || loan.status !== 'ACTIVE') return;
 
             if (loan.isEmi && loan.tenure && loan.emiFrequency) {
                 const emiAmount = calculateEmiAmount(loan);
@@ -237,21 +278,31 @@ export const getAllUpcomingPayments = (lendies: Lendie[], today: Date): Upcoming
 
                 for (let i = 1; i <= loan.tenure; i++) {
                     const dueDate = addPeriods(loanStartDate, loan.emiFrequency, i);
-                    if (dueDate >= today) {
-                        // This is the next upcoming payment.
-                        // We only care if it's within our 30-day window.
-                        if (dueDate <= windowEnd) {
-                             upcoming.push({
-                                date: dueDate.toISOString().split('T')[0],
-                                lendieId: lendie.id,
-                                lendieName: lendie.name,
-                                loanId: loan.id,
-                                amount: emiAmount,
-                                type: 'EMI',
-                            });
+                    
+                    if (dueDate >= today && dueDate <= windowEnd) {
+                        const previousDueDate = addPeriods(loanStartDate, loan.emiFrequency, i - 1);
+                        
+                        const paymentsThisPeriod = loanRepayments.filter(r => 
+                            r.loanId === loan.id &&
+                            new Date(r.date) > previousDueDate && 
+                            new Date(r.date) <= dueDate
+                        );
+                        
+                        const totalPaidThisPeriod = paymentsThisPeriod.reduce((sum, p) => sum + p.amount, 0);
+                        
+                        // If this installment has been paid, skip it.
+                        if (totalPaidThisPeriod >= emiAmount) {
+                            continue;
                         }
-                        // Found the next due date for this loan, so we can stop checking its other installments.
-                        break; 
+
+                        upcoming.push({
+                            date: dueDate.toISOString().split('T')[0],
+                            lendieId: lendie.id,
+                            lendieName: lendie.name,
+                            loanId: loan.id,
+                            amount: emiAmount,
+                            type: 'EMI',
+                        });
                     }
                 }
             } else if (loan.dueDate) {
